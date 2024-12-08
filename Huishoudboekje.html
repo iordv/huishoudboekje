@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huishoudboekje | Financieel Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-pink-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Modal Component
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg max-w-md w-full p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-pink-600">{title}</h3>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+                        </div>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        function App() {
+            const [data, setData] = React.useState(() => {
+                try {
+                    const savedData = localStorage.getItem('expensesData');
+                    if (savedData) {
+                        return JSON.parse(savedData);
+                    }
+                } catch (e) {
+                    console.error('Error loading data:', e);
+                }
+                return {
+                    jordy: {
+                        name: 'Jordy ❤️',
+                        incomes: [{ label: 'Salaris', amount: 0, note: '' }],
+                        expenses: [{ label: 'Netflix', amount: 0, note: '' }]
+                    },
+                    carmen: {
+                        name: 'Carmen ❤️',
+                        incomes: [{ label: 'Salaris', amount: 0, note: '' }],
+                        expenses: [{ label: 'Netflix', amount: 0, note: '' }]
+                    },
+                    sharedExpenses: [
+                        { label: 'Huur', amount: 0, note: '' },
+                        { label: 'Gas/Licht', amount: 0, note: '' }
+                    ]
+                };
+            });
+
+            const [showLoveMessage, setShowLoveMessage] = React.useState(false);
+            const [modalConfig, setModalConfig] = React.useState({
+                isOpen: false,
+                type: null,
+                person: null,
+                itemType: null,
+                editingItem: null,
+                editingIndex: null
+            });
+            const [noteModal, setNoteModal] = React.useState({
+                isOpen: false,
+                note: '',
+                title: ''
+            });
+
+            React.useEffect(() => {
+                localStorage.setItem('expensesData', JSON.stringify(data));
+            }, [data]);
+
+            const calculateTotal = (items) => {
+                return items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+            };
+
+            const calculateShares = () => {
+                const jordyIncome = calculateTotal(data.jordy.incomes);
+                const carmenIncome = calculateTotal(data.carmen.incomes);
+                const totalIncome = jordyIncome + carmenIncome;
+                const totalShared = calculateTotal(data.sharedExpenses);
+
+                if (totalIncome === 0) return { jordyShare: 0, carmenShare: 0 };
+
+                return {
+                    jordyShare: ((jordyIncome / totalIncome) * totalShared).toFixed(2),
+                    carmenShare: ((carmenIncome / totalIncome) * totalShared).toFixed(2),
+                    jordyPercentage: ((jordyIncome / totalIncome) * 100).toFixed(1),
+                    carmenPercentage: ((carmenIncome / totalIncome) * 100).toFixed(1)
+                };
+            };
+
+            const handleSave = () => {
+                setShowLoveMessage(true);
+                setTimeout(() => setShowLoveMessage(false), 2000);
+            };
+
+            const openAddModal = (person, itemType) => {
+                setModalConfig({
+                    isOpen: true,
+                    type: 'add',
+                    person,
+                    itemType,
+                    editingItem: { label: '', amount: '', note: '' },
+                    editingIndex: null
+                });
+            };
+
+            const openEditModal = (person, itemType, item, index) => {
+                setModalConfig({
+                    isOpen: true,
+                    type: 'edit',
+                    person,
+                    itemType,
+                    editingItem: { ...item },
+                    editingIndex: index
+                });
+            };
+
+            const closeModal = () => {
+                setModalConfig({
+                    isOpen: false,
+                    type: null,
+                    person: null,
+                    itemType: null,
+                    editingItem: null,
+                    editingIndex: null
+                });
+            };
+
+            const handleModalSave = () => {
+                const { type, person, itemType, editingItem, editingIndex } = modalConfig;
+                const newData = { ...data };
+
+                if (person === 'shared') {
+                    if (type === 'add') {
+                        newData.sharedExpenses.push(editingItem);
+                    } else {
+                        newData.sharedExpenses[editingIndex] = editingItem;
+                    }
+                } else {
+                    if (type === 'add') {
+                        newData[person][itemType].push(editingItem);
+                    } else {
+                        newData[person][itemType][editingIndex] = editingItem;
+                    }
+                }
+
+                setData(newData);
+                closeModal();
+            };
+
+            const showNote = (note, title) => {
+                setNoteModal({
+                    isOpen: true,
+                    note,
+                    title
+                });
+            };
+
+            const ItemList = ({ items, onAdd, onEdit, title }) => (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-700">{title}</h3>
+                        <button
+                            onClick={onAdd}
+                            className="bg-pink-500 text-white px-3 py-1 rounded hover:bg-pink-600"
+                        >
+                            + Toevoegen
+                        </button>
+                    </div>
+                    {items.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2 bg-white p-2 rounded shadow">
+                            <div className="flex-1 font-medium">{item.label}</div>
+                            <div className="w-32 text-right">€{Number(item.amount).toFixed(2)}</div>
+                            {item.note && (
+                                <button
+                                    onClick={() => showNote(item.note, item.label)}
+                                    className="text-yellow-500 hover:text-yellow-600"
+                                    title="Bekijk notitie"
+                                >
+                                    ❗
+                                </button>
+                            )}
+                            <button
+                                onClick={() => onEdit(item, index)}
+                                className="text-blue-500 hover:text-blue-600"
+                            >
+                                ✏️
+                            </button>
+                        </div>
+                    ))}
+                    <div className="flex justify-end mt-2">
+                        <div className={`font-bold text-lg bg-white px-3 py-1 rounded shadow ${
+                            title === "Inkomsten" ? "text-green-600 bg-green-50" : 
+                            title === "Uitgaven" ? "text-red-600 bg-red-50" : 
+                            "text-blue-600 bg-blue-50"
+                        }`}>
+                            Totaal: €{calculateTotal(items).toFixed(2)}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const PersonSection = ({ person, personKey }) => (
+                <div className="bg-white p-6 rounded-lg shadow-md space-y-6">
+                    <h2 className="text-xl font-bold text-pink-600">{person.name}</h2>
+                    
+                    <ItemList
+                        items={person.incomes}
+                        onAdd={() => openAddModal(personKey, 'incomes')}
+                        onEdit={(item, index) => openEditModal(personKey, 'incomes', item, index)}
+                        title="Inkomsten"
+                    />
+
+                    <ItemList
+                        items={person.expenses}
+                        onAdd={() => openAddModal(personKey, 'expenses')}
+                        onEdit={(item, index) => openEditModal(personKey, 'expenses', item, index)}
+                        title="Uitgaven"
+                    />
+                </div>
+            );
+
+            const shares = calculateShares();
+
+            const handleSort = () => {
+                const newData = { ...data };
+                // Sort Jordy's data
+                newData.jordy.incomes.sort((a, b) => b.amount - a.amount);
+                newData.jordy.expenses.sort((a, b) => b.amount - a.amount);
+                // Sort Carmen's data
+                newData.carmen.incomes.sort((a, b) => b.amount - a.amount);
+                newData.carmen.expenses.sort((a, b) => b.amount - a.amount);
+                // Sort shared expenses
+                newData.sharedExpenses.sort((a, b) => b.amount - a.amount);
+                setData(newData);
+            };
+
+            const handleExport = () => {
+                // Huidige staat van de data ophalen
+                const exportData = {
+                    jordy: data.jordy,
+                    carmen: data.carmen,
+                    sharedExpenses: data.sharedExpenses
+                };
+                
+                // Complete applicatie in één bestand
+                const fullAppContent = document.documentElement.outerHTML;
+                
+                // Data injecteren in het bestand
+                const modifiedContent = fullAppContent.replace(
+                    'const [data, setData] = React.useState(() => {',
+                    `const [data, setData] = React.useState(() => { return ${JSON.stringify(exportData)};`
+                );
+
+                // Download creëren
+                const blob = new Blob([modifiedContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                const now = new Date();
+                const dateStr = now.toISOString().split('T')[0];
+                link.download = `huishoudboekje_${dateStr}.html`;
+                link.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto p-4 space-y-6">
+                    <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
+                        Financieel Dashboard
+                    </h1>
+                    <p className="text-center text-gray-600 mb-8">Huishoudboekje van Jordy & Carmen ❤️</p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <PersonSection person={data.jordy} personKey="jordy" />
+                        <PersonSection person={data.carmen} personKey="carmen" />
+                    </div>
+
+                    <div className="bg-pink-100 p-6 rounded-lg shadow-md">
+                        <h2 className="text-xl font-bold text-pink-600 mb-4">Gezamenlijke Lasten ❤️</h2>
+                        <ItemList
+                            items={data.sharedExpenses}
+                            onAdd={() => openAddModal('shared', 'expenses')}
+                            onEdit={(item, index) => openEditModal('shared', 'expenses', item, index)}
+                            title=""
+                        />
+                    </div>
+
+                    <div className="bg-white p-6 rounded-lg shadow-md space-y-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Financieel Overzicht</h2>
+                        
+                        {/* Gezamenlijke lasten verdeling */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-pink-50 p-4 rounded-lg">
+                                <h3 className="font-semibold text-gray-700 mb-3">Verdeling Gezamenlijke Lasten</h3>
+                                <div className="space-y-3">
+                                    {/* Progress bar Jordy */}
+                                    <div>
+                                        <div className="flex justify-between mb-1">
+                                            <span>{data.jordy.name}</span>
+                                            <span>€{shares.jordyShare} ({shares.jordyPercentage}%)</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                            <div
+                                                className="bg-blue-600 h-2.5 rounded-full"
+                                                style={{ width: `${shares.jordyPercentage}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                    {/* Progress bar Carmen */}
+                                    <div>
+                                        <div className="flex justify-between mb-1">
+                                            <span>{data.carmen.name}</span>
+                                            <span>€{shares.carmenShare} ({shares.carmenPercentage}%)</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                            <div
+                                                className="bg-pink-500 h-2.5 rounded-full"
+                                                style={{ width: `${shares.carmenPercentage}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50 p-4 rounded-lg">
+                                <h3 className="font-semibold text-gray-700 mb-3">Totaal Overzicht</h3>
+                                <div className="space-y-2">
+                                    <p className="flex justify-between items-center bg-blue-100 p-2 rounded">
+                                        <span>Totaal Gezamenlijke Lasten:</span>
+                                        <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow">
+                                            €{calculateTotal(data.sharedExpenses).toFixed(2)}
+                                        </span>
+                                    </p>
+                                    <p className="flex justify-between items-center bg-green-100 p-2 rounded">
+                                        <span>Totaal Maandelijkse Inkomsten:</span>
+                                        <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-green-600">
+                                            €{(calculateTotal(data.jordy.incomes) + calculateTotal(data.carmen.incomes)).toFixed(2)}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Individuele analyses */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                            {/* Jordy's Analyse */}
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-gray-700">Analyse {data.jordy.name}</h3>
+                                <div className="space-y-2">
+                                    <div className="bg-gray-50 p-3 rounded">
+                                        <div className="space-y-2">
+                                            <p className="flex justify-between items-center bg-green-50 p-2 rounded">
+                                                <span>Totaal Inkomen:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-green-600">
+                                                    €{calculateTotal(data.jordy.incomes).toFixed(2)}
+                                                </span>
+                                            </p>
+                                            <p className="flex justify-between items-center bg-red-50 p-2 rounded">
+                                                <span>Privé Uitgaven:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-red-600">
+                                                    €{calculateTotal(data.jordy.expenses).toFixed(2)}
+                                                </span>
+                                            </p>
+                                            <p className="flex justify-between items-center bg-blue-50 p-2 rounded">
+                                                <span>Aandeel Gezamenlijk:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-blue-600">
+                                                    €{shares.jordyShare}
+                                                </span>
+                                            </p>
+                                            <p className="flex justify-between items-center bg-emerald-50 p-2 rounded">
+                                                <span>Vrij Besteedbaar:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-emerald-600">
+                                                    €{(calculateTotal(data.jordy.incomes) - calculateTotal(data.jordy.expenses) - Number(shares.jordyShare)).toFixed(2)}
+                                                </span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div
+                                            className="bg-green-500 h-2.5 rounded-full"
+                                            style={{ 
+                                                width: `${(calculateTotal(data.jordy.expenses) + Number(shares.jordyShare)) / calculateTotal(data.jordy.incomes) * 100}%` 
+                                            }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-sm text-gray-600 text-center">Percentage van inkomen besteed</p>
+                                </div>
+                            </div>
+
+                            {/* Carmen's Analyse */}
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-gray-700">Analyse {data.carmen.name}</h3>
+                                <div className="space-y-2">
+                                    <div className="bg-gray-50 p-3 rounded">
+                                        <div className="space-y-2">
+                                            <p className="flex justify-between items-center bg-green-50 p-2 rounded">
+                                                <span>Totaal Inkomen:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-green-600">
+                                                    €{calculateTotal(data.carmen.incomes).toFixed(2)}
+                                                </span>
+                                            </p>
+                                            <p className="flex justify-between items-center bg-red-50 p-2 rounded">
+                                                <span>Privé Uitgaven:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-red-600">
+                                                    €{calculateTotal(data.carmen.expenses).toFixed(2)}
+                                                </span>
+                                            </p>
+                                            <p className="flex justify-between items-center bg-blue-50 p-2 rounded">
+                                                <span>Aandeel Gezamenlijk:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-blue-600">
+                                                    €{shares.carmenShare}
+                                                </span>
+                                            </p>
+                                            <p className="flex justify-between items-center bg-emerald-50 p-2 rounded">
+                                                <span>Vrij Besteedbaar:</span>
+                                                <span className="font-bold text-lg bg-white px-3 py-1 rounded shadow text-emerald-600">
+                                                    €{(calculateTotal(data.carmen.incomes) - calculateTotal(data.carmen.expenses) - Number(shares.carmenShare)).toFixed(2)}
+                                                </span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div
+                                            className="bg-green-500 h-2.5 rounded-full"
+                                            style={{ 
+                                                width: `${(calculateTotal(data.carmen.expenses) + Number(shares.carmenShare)) / calculateTotal(data.carmen.incomes) * 100}%` 
+                                            }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-sm text-gray-600 text-center">Percentage van inkomen besteed</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                        <button
+                            onClick={handleExport}
+                            className="flex-1 bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                            💾 Exporteer als HTML
+                        </button>
+                        <button
+                            onClick={handleSort}
+                            className="flex-1 bg-purple-500 text-white py-2 px-4 rounded-lg hover:bg-purple-600 transition-colors"
+                        >
+                            ↓ Sorteer Bedragen
+                        </button>
+                    </div>
+
+                    {/* Add/Edit Modal */}
+                    <Modal
+                        isOpen={modalConfig.isOpen}
+                        onClose={closeModal}
+                        title={modalConfig.type === 'add' ? 'Toevoegen' : 'Bewerken'}
+                    >
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Omschrijving</label>
+                                <input
+                                    type="text"
+                                    value={modalConfig.editingItem?.label || ''}
+                                    onChange={(e) => setModalConfig({
+                                        ...modalConfig,
+                                        editingItem: { ...modalConfig.editingItem, label: e.target.value }
+                                    })}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Bedrag</label>
+                                <input
+                                    type="number"
+                                    value={modalConfig.editingItem?.amount || ''}
+                                    onChange={(e) => setModalConfig({
+                                        ...modalConfig,
+                                        editingItem: { ...modalConfig.editingItem, amount: e.target.value }
+                                    })}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Notitie</label>
+                                <textarea
+                                    value={modalConfig.editingItem?.note || ''}
+                                    onChange={(e) => setModalConfig({
+                                        ...modalConfig,
+                                        editingItem: { ...modalConfig.editingItem, note: e.target.value }
+                                    })}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                                    rows="3"
+                                />
+                            </div>
+                            <div className="flex justify-between mt-6">
+                                <button
+                                    onClick={() => {
+                                        if (modalConfig.type === 'edit' && window.confirm('Weet je zeker dat je dit item wilt verwijderen?')) {
+                                            const newData = { ...data };
+                                            if (modalConfig.person === 'shared') {
+                                                newData.sharedExpenses = newData.sharedExpenses.filter((_, i) => i !== modalConfig.editingIndex);
+                                            } else {
+                                                newData[modalConfig.person][modalConfig.itemType] = 
+                                                    newData[modalConfig.person][modalConfig.itemType].filter((_, i) => i !== modalConfig.editingIndex);
+                                            }
+                                            setData(newData);
+                                            closeModal();
+                                        }
+                                    }}
+                                    className={`px-4 py-2 rounded ${
+                                        modalConfig.type === 'edit' 
+                                            ? 'bg-red-500 text-white hover:bg-red-600' 
+                                            : 'invisible'
+                                    }`}
+                                >
+                                    Verwijderen
+                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={closeModal}
+                                        className="px-4 py-2 text-gray-700 hover:text-gray-900"
+                                    >
+                                        Annuleren
+                                    </button>
+                                    <button
+                                        onClick={handleModalSave}
+                                        className="px-4 py-2 bg-pink-500 text-white rounded hover:bg-pink-600"
+                                    >
+                                        Opslaan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </Modal>
+
+                    {/* Note Modal */}
+                    <Modal
+                        isOpen={noteModal.isOpen}
+                        onClose={() => setNoteModal({ isOpen: false, note: '', title: '' })}
+                        title={`Notitie: ${noteModal.title}`}
+                    >
+                        <p className="text-gray-700">{noteModal.note}</p>
+                    </Modal>
+
+                    {showLoveMessage && (
+                        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                            <div className="bg-white p-8 rounded-lg shadow-xl animate-bounce">
+                                <h2 className="text-3xl font-bold text-pink-600">I LOVE YOU! ❤️</h2>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
